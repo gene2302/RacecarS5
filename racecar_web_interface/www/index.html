@@ -1,0 +1,251 @@
+<!doctype html>
+<html>
+<html lang="fr">
+<!-- 
+==References==
+Server-side:
+* http://docs.ros.org/indigo/api/roswww/html/
+* http://wiki.ros.org/web_video_server
+* http://wiki.ros.org/rosbridge_suite/Tutorials/RunningRosbridge
+
+Client-side:
+* http://wiki.ros.org/roslibjs/Tutorials/BasicRosFunctionality
+* https://getbootstrap.com/docs/4.0/getting-started/introduction/
+* https://getbootstrap.com/docs/4.0/layout/grid/
+-->
+
+<head>
+    <!-- Required meta tags -->
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+
+    <!-- Bootstrap CSS -->
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+    <link rel="stylesheet" href="css/dashboard.css">
+
+    <title>Laboratoire S5-APP1</title>
+  
+  <style>
+
+  </style>
+</head>
+
+<body>
+    
+  <!-- Menu BEGIN-->
+  <div class="collapse" id="navbarToggleExternalContent">
+    <div class="bg-dark p-4">
+      <h6 class="text-white h4">Configuration</h6>
+
+      <div class="form-group">
+        <label style="color: white" for="ipAdressInput"><b>ROS Master IP:</b></label>
+        <input type="text" class="form-control" id="ipAdressInput">
+        <script>document.getElementById("ipAdressInput").value="10.42.0.1"</script>
+        <button type="button" class="btn btn-light" onclick="connectToIp()">Connectez!</button>
+        <button type="button" class="btn btn-light" onclick="closeConnection()">Déconnecter!</button>
+      </div>
+
+    </div>
+  </div>
+  
+  <nav class="navbar navbar-dark bg-dark">
+    <div class="container-fluid">
+      <div class="row justify-content-start">
+        <div class="col">  
+          <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarToggleExternalContent">
+            <span class="navbar-toggler-icon"></span>
+          </button>
+        </div> 
+        <div class="col">
+          <h2 style="color: white"> Racecar </h2>
+        </div>
+      </div>
+    </div>
+  </nav>
+  <!-- Menu END-->
+
+  <!-- Main layout BEGIN-->
+  <div class="container-fluid ">
+    <div class="row">
+     <!-- Satus and control section-->
+
+      
+      <!-- Camera section -->
+      <div class="col-sm-8">
+      <h3>Caméra</h3>
+      <img src="http://10.42.0.1:8080/stream?topic=/raspicam_node/image&type=ros_compressed" alt="pas de flux video"  style="width:100%;height:75%;"></img>
+      <!--<img src="reconfigure_raspicam_node.png"></img> style="width:100%;height:auto;" class="img-fluid"-->
+        
+      </div>
+      <div class="col-sm-4">
+        <div>
+        <p style="font-size: 30px"> 
+        <img id="connectionIcon" src="images/disconnected.png" alt="connection" style="float: right; height:   42px; width: 42px">  Statut
+        </p>
+        
+        
+        <div class="from-group">
+          <!--<textarea readonly class="form-control" id="statusTextarea" rows="4"></textarea>-->
+          <!--<button type="button" class="btn btn-dark" onclick="clearTextarea()">Effacez</button>-->
+          <span id="result"></span>
+        </div>
+        <h3>Contrôle</h3>
+        <div style= "height: 150px" class="container-fluid" id="joystickArea"> </div>
+         
+        
+      </div>
+    </div>
+  </div>
+  <!-- Main layout END-->
+  
+  <!-- JavaScript, import frameworks -->
+  <!-- jQuery first, then Popper.js, then Bootstrap JS -->
+  <script src="js/jquery-3.3.1.slim.min.js"></script>
+  <script src="js/popper.min.js"></script>
+  <script src="js/bootstrap.min.js"></script>
+  <script src="js/roslib.min.js"></script> <!-- rosbridge -->
+  <script src="js/virtualjoystick.js"></script> <!-- joystick virtual-->
+  <!-- Custom scripts -->
+    <!-- Custom scripts -->
+  <script>
+      // Define some global variables
+      var rbServer = null;
+      var cmdVelTopic = null;
+      var targetIp = '10.42.0.1';
+
+      var joystick = new VirtualJoystick({
+          mouseSupport	: true,
+          strokeStyle	: 'orange',
+          container : document.getElementById("joystickArea"),
+          limitStickTravel:true,
+            stickRadius: 50,
+          stationaryBase: true,
+            baseX:70,
+            baseY:70
+        });
+
+      var newX = 0;
+      var newY = 0;
+
+      //Some initializations after the page has been shown
+      $(document).ready(function(){
+        document.getElementById("log").value = 'Default text\n'
+      });
+    
+
+      // Define some functions
+      function connectROS() {
+        // This function connects to the rosbridge server
+        
+	    rbServer = new ROSLIB.Ros({
+          // Assuming ros server IP is 10.42.0.1
+	      url : 'ws://'+targetIp+":9090"
+	    });
+
+        rbServer.on('connection', function(){
+            console.log('Connected to websocket server.');
+
+            // These lines create a topic object as defined by roslibjs
+            cmdVelTopic = new ROSLIB.Topic({
+                ros : rbServer,
+                name : '/cmd_vel_input_2',
+                messageType : 'geometry_msgs/Twist'
+            });
+            
+            /*document.getElementById("advanceButton").disabled=false;
+            document.getElementById("stopButton").disabled=false;*/
+            document.getElementById("connectionIcon").src="images/connected.png";
+	    });
+
+        rbServer.on('error', function(error) {
+          console.log('Error connecting to websocket server: ', error);
+          /*document.getElementById("advanceButton").disabled=true;
+          document.getElementById("stopButton").disabled=true;*/
+          document.getElementById("connectionIcon").src="images/disconnected.png";
+	    });
+
+	    rbServer.on('close', function() {
+          console.log('Connection to websocket server closed.');
+          /*document.getElementById("advanceButton").disabled=true;
+          document.getElementById("stopButton").disabled=true;*/
+          document.getElementById("connectionIcon").src="images/disconnected.png";
+	    });
+      }
+ 
+      // These lines create a message that conforms to the structure of the Twist defined in our ROS installation
+      // It initalizes all properties to zero. They will be set to appropriate values before we publish this message.
+      var twist = new ROSLIB.Message({
+           linear : {
+                x : 0.0,
+                y : 0.0,
+                z : 0.0
+            },
+            angular : {
+                x : 0.0,
+                y : 0.0,
+                z : 0.0
+            }
+      });
+
+      //Publishing loop cmd_vel at 5 Hz
+      setInterval(function(){
+            var outputEl	= document.getElementById('result');
+            newY = Math.round(joystick.deltaX())/-50; //car le rayon est de 50
+            newX = Math.round(joystick.deltaY())/-50;
+      
+			outputEl.innerHTML	= '<b>Twist:</b> '
+				+ ' dx:'+newX
+				+ ' dz:'+newY
+
+           twist.linear.x = newX;
+           twist.angular.z = newY; 
+           
+           if(cmdVelTopic != null)
+           {
+             cmdVelTopic.publish(twist);
+           }
+      }, 200);
+
+    // Textarea manipulation
+    /*function clearTextarea(){
+      document.getElementById("statusTextarea").value="";
+      document.getElementById("statusTextarea").scrollTop=  document.getElementById("statusTextarea").scrollHeight;
+    }
+    
+    function avanceCommand(){
+      // Command to ROS
+      twist.linear.x = 1;
+      
+      document.getElementById("statusTextarea").value+="En avant!\n";
+      document.getElementById("statusTextarea").scrollTop=  document.getElementById("statusTextarea").scrollHeight;
+    }
+    
+    function stopCommand(){
+      // Command to ROS
+      twist.linear.x =0;
+      
+      document.getElementById("statusTextarea").value+="Arrêt!\n";
+      document.getElementById("statusTextarea").scrollTop=  document.getElementById("statusTextarea").scrollHeight;
+    }*/
+    
+    function connectToIp(){
+      targetIp = document.getElementById("ipAdressInput").value;
+      connectROS();
+    }
+    function closeConnection(){
+      rbServer.close();
+    }
+    
+    // Extra initiation
+    //Disable button until the Racecar is connected
+    /*document.getElementById("advanceButton").disabled=true;
+    document.getElementById("stopButton").disabled=true;*/
+    
+    // Try to connect automatycally to 10.42.0.1
+    connectROS();
+    
+
+    
+  </script>
+</body>
+</html>
